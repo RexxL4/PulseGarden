@@ -397,7 +397,6 @@ def main():
                 running = False
 
             elif event.type == pygame.VIDEORESIZE:
-
                 if not fullscreen:
                     window_width = max(640, event.w)
                     window_height = max(480, event.h)
