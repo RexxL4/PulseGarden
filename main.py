@@ -313,6 +313,8 @@ def calculate_accuracy(state):
 
 
 def get_rank(accuracy):
+    if accuracy >= 100:
+        return "SS"
     if accuracy >= 95.0:
         return "S"
     if accuracy >= 85.0:
