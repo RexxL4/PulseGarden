@@ -116,6 +116,7 @@ The final rank is based on accuracy:
 
 | Accuracy | Rank |
 |---:|:---:|
+| 100% | SS |
 | 95%+ | S |
 | 85%+ | A |
 | 70%+ | B |
