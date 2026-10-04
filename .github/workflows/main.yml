@@ -31,7 +31,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install pygame pyinstaller
 
-      - name: Build executable
+      - name: Build PyInstaller executable
         run: |
           pyinstaller \
             --onefile \
@@ -39,15 +39,11 @@ jobs:
             --name PulseGarden \
             main.py
 
-      - name: Download linuxdeploy
-        run: |
-          wget -O linuxdeploy \
-            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          chmod +x linuxdeploy
-
       - name: Create AppDir
         run: |
           mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+
           cp dist/PulseGarden AppDir/usr/bin/PulseGarden
 
       - name: Create desktop entry
@@ -57,13 +53,13 @@ jobs:
           Name=Pulse Garden
           Comment=An original Python/Pygame rhythm game
           Exec=PulseGarden
-          Icon=pulse-garden
+          Icon=PulseGarden
           Type=Application
           Categories=Game;
           Terminal=false
           EOF
 
-      - name: Create placeholder icon
+      - name: Create application icon
         run: |
           python - <<'PY'
           import pygame
@@ -71,6 +67,7 @@ jobs:
           pygame.init()
 
           surface = pygame.Surface((256, 256), pygame.SRCALPHA)
+
           surface.fill((20, 20, 30, 255))
 
           pygame.draw.circle(
@@ -87,23 +84,37 @@ jobs:
               25
           )
 
-          pygame.image.save(surface, "AppDir/pulse-garden.png")
+          pygame.image.save(
+              surface,
+              "AppDir/usr/share/icons/hicolor/256x256/apps/PulseGarden.png"
+          )
+
           pygame.quit()
           PY
 
+      - name: Download appimagetool
+        run: |
+          wget -O appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+
+          chmod +x appimagetool
+
       - name: Build AppImage
         run: |
-          ./linuxdeploy \
-            --appdir AppDir \
-            --desktop-file AppDir/PulseGarden.desktop \
-            --icon-file AppDir/pulse-garden.png \
-            --output appimage
+          ARCH=x86_64 ./appimagetool \
+            AppDir \
+            PulseGarden-Linux-x86_64.AppImage
 
-      - name: Rename AppImage
+      - name: Make AppImage executable
         run: |
-          mv PulseGarden-x86_64.AppImage PulseGarden-Linux-x86_64.AppImage
+          chmod +x PulseGarden-Linux-x86_64.AppImage
 
-      - name: Upload AppImage artifact
+      - name: Show AppImage
+        run: |
+          ls -lh PulseGarden-Linux-x86_64.AppImage
+          file PulseGarden-Linux-x86_64.AppImage
+
+      - name: Upload Linux AppImage
         uses: actions/upload-artifact@v4
         with:
           name: PulseGarden-Linux-AppImage
@@ -136,7 +147,7 @@ jobs:
             --name PulseGarden `
             main.py
 
-      - name: Upload Windows artifact
+      - name: Upload Windows executable
         uses: actions/upload-artifact@v4
         with:
           name: PulseGarden-Windows
@@ -158,15 +169,11 @@ jobs:
           name: PulseGarden-Linux-AppImage
           path: release/linux
 
-      - name: Download Windows build
+      - name: Download Windows executable
         uses: actions/download-artifact@v4
         with:
           name: PulseGarden-Windows
           path: release/windows
-
-      - name: Make AppImage executable
-        run: |
-          chmod +x release/linux/PulseGarden-Linux-x86_64.AppImage
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
