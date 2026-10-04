@@ -4,64 +4,46 @@ import pygame
 
 
 # ============================================================
-# CONFIG
+# CONFIGURATION
 # ============================================================
-STAR_SEED  = random.random()
+
 GAME_WIDTH = 1280
 GAME_HEIGHT = 720
 
 SSAA = 2
-FPS = 170
 
-BPM = 256
-BEAT = 60.0 / BPM
+RENDER_WIDTH = GAME_WIDTH * SSAA
+RENDER_HEIGHT = GAME_HEIGHT * SSAA
+
+FPS = 165
+
+MOVEMENT_BPM = 256
+CLICK_BPM = 128
 
 NODE_COUNT = 120
 
-PLAYER_RADIUS = 15.0
+PLAYER_RADIUS = 15
 PLAYER_SPEED = 420.0
 
 MIN_NODE_DISTANCE = 45.0
-MAX_NODE_DISTANCE = PLAYER_SPEED * BEAT * 0.70
 
+# Movement mode has to be reachable at 256 BPM.
+MOVEMENT_BEAT = 60.0 / MOVEMENT_BPM
+MAX_NODE_DISTANCE = PLAYER_SPEED * MOVEMENT_BEAT * 0.45
+
+# Distance judgement windows.
 PERFECT_DISTANCE = 25.0
 GOOD_DISTANCE = 50.0
 BAD_DISTANCE = 80.0
 
-
-# ============================================================
-# COLORS
-# ============================================================
-
-BG = (7, 9, 18)
-GRID = (12, 17, 31)
-STAR = (18, 31, 52)
-ROUTE = (24, 55, 80)
-
-NODE_DIM = (28, 70, 92)
-NODE_OUTER = (25, 100, 145)
-NODE_RING = (50, 170, 230)
-NODE_BRIGHT = (100, 225, 255)
-NODE_WHITE = (225, 250, 255)
-
-PLAYER_OUTER = (30, 100, 135)
-PLAYER = (80, 205, 245)
-PLAYER_CORE = (220, 250, 255)
-
-TEXT = (235, 240, 255)
-TEXT_DIM = (145, 165, 190)
-
-PROGRESS_BG = (20, 30, 45)
-PROGRESS = (70, 190, 230)
-
-PERFECT_COLOR = (120, 255, 220)
-GOOD_COLOR = (120, 210, 255)
-BAD_COLOR = (255, 210, 100)
-MISS_COLOR = (255, 100, 120)
+# Click timing windows.
+CLICK_PERFECT = 0.045
+CLICK_GOOD = 0.090
+CLICK_BAD = 0.140
 
 
 # ============================================================
-# HELPERS
+# UTILITY
 # ============================================================
 
 def clamp(value, minimum, maximum):
@@ -72,22 +54,25 @@ def distance(x1, y1, x2, y2):
     return math.hypot(x2 - x1, y2 - y1)
 
 
-def normalize(x, y):
-    length = math.hypot(x, y)
-
-    if length <= 0.000001:
-        return 0.0, 0.0
-
-    return x / length, y / length
-
-
-def draw_text(surface, font, text, x, y, color=TEXT, center=False):
+def draw_text(
+    surface,
+    text,
+    font,
+    x,
+    y,
+    color=(255, 255, 255),
+    center=False
+):
     image = font.render(str(text), True, color)
 
     if center:
-        rect = image.get_rect(center=(int(x), int(y)))
+        rect = image.get_rect(
+            center=(int(x), int(y))
+        )
     else:
-        rect = image.get_rect(topleft=(int(x), int(y)))
+        rect = image.get_rect(
+            topleft=(int(x), int(y))
+        )
 
     surface.blit(image, rect)
 
@@ -96,85 +81,116 @@ def draw_text(surface, font, text, x, y, color=TEXT, center=False):
 # LEVEL GENERATION
 # ============================================================
 
-def generate_garden():
+def generate_level():
+
     nodes = []
 
-    x = GAME_WIDTH * 0.5
-    y = GAME_HEIGHT * 0.5
+    x = GAME_WIDTH / 2
+    y = GAME_HEIGHT / 2
 
     nodes.append((x, y))
 
-    for i in range(NODE_COUNT - 1):
+    for _ in range(NODE_COUNT - 1):
+
         previous_x, previous_y = nodes[-1]
 
         candidates = []
 
-        for _ in range(120):
-            angle = random.uniform(0.0, math.tau)
-            dist = random.uniform(
+        for _ in range(100):
+
+            angle = random.uniform(
+                0.0,
+                math.tau
+            )
+
+            node_distance = random.uniform(
                 MIN_NODE_DISTANCE,
                 MAX_NODE_DISTANCE
             )
 
-            candidate_x = previous_x + math.cos(angle) * dist
-            candidate_y = previous_y + math.sin(angle) * dist
+            nx = (
+                previous_x
+                + math.cos(angle) * node_distance
+            )
 
-            margin = 70.0
+            ny = (
+                previous_y
+                + math.sin(angle) * node_distance
+            )
 
-            if candidate_x < margin:
-                continue
+            margin = 70
 
-            if candidate_x > GAME_WIDTH - margin:
-                continue
+            nx = clamp(
+                nx,
+                margin,
+                GAME_WIDTH - margin
+            )
 
-            if candidate_y < margin:
-                continue
-
-            if candidate_y > GAME_HEIGHT - margin:
-                continue
+            ny = clamp(
+                ny,
+                margin,
+                GAME_HEIGHT - margin
+            )
 
             valid = True
 
-            # Keep the recent route from folding over itself.
-            for old_x, old_y in nodes[-12:]:
+            for old_x, old_y in nodes[-8:]:
+
                 if distance(
-                    candidate_x,
-                    candidate_y,
+                    nx,
+                    ny,
                     old_x,
                     old_y
                 ) < MIN_NODE_DISTANCE:
+
                     valid = False
                     break
 
             if valid:
-                candidates.append((candidate_x, candidate_y))
+                candidates.append(
+                    (nx, ny)
+                )
 
         if candidates:
-            # Prefer candidates that continue in a somewhat
-            # different direction, making the route readable.
-            candidate = random.choice(candidates)
-            nodes.append(candidate)
+
+            nodes.append(
+                random.choice(candidates)
+            )
 
         else:
-            # Guaranteed fallback.
-            angle = random.uniform(0.0, math.tau)
 
-            candidate_x = previous_x + math.cos(angle) * MIN_NODE_DISTANCE
-            candidate_y = previous_y + math.sin(angle) * MIN_NODE_DISTANCE
-
-            candidate_x = clamp(
-                candidate_x,
-                70.0,
-                GAME_WIDTH - 70.0
+            angle = random.uniform(
+                0.0,
+                math.tau
             )
 
-            candidate_y = clamp(
-                candidate_y,
-                70.0,
-                GAME_HEIGHT - 70.0
+            nx = (
+                previous_x
+                + math.cos(angle)
+                * MAX_NODE_DISTANCE
             )
 
-            nodes.append((candidate_x, candidate_y))
+            ny = (
+                previous_y
+                + math.sin(angle)
+                * MAX_NODE_DISTANCE
+            )
+
+            nx = clamp(
+                nx,
+                70,
+                GAME_WIDTH - 70
+            )
+
+            ny = clamp(
+                ny,
+                70,
+                GAME_HEIGHT - 70
+            )
+
+            nodes.append(
+                (nx, ny)
+            )
 
     return nodes
 
@@ -184,143 +200,252 @@ def generate_garden():
 # ============================================================
 
 class Particle:
-    def __init__(self, x, y, vx, vy, lifetime, size):
+
+    def __init__(self, x, y, color):
+
         self.x = x
         self.y = y
-        self.vx = vx
-        self.vy = vy
-        self.life = lifetime
-        self.max_life = lifetime
-        self.size = size
+
+        angle = random.uniform(
+            0.0,
+            math.tau
+        )
+
+        speed = random.uniform(
+            50.0,
+            220.0
+        )
+
+        self.vx = math.cos(angle) * speed
+        self.vy = math.sin(angle) * speed
+
+        self.life = random.uniform(
+            0.25,
+            0.65
+        )
+
+        self.max_life = self.life
+
+        self.radius = random.uniform(
+            2.0,
+            5.0
+        )
+
+        self.color = (
+            int(clamp(color[0], 0, 255)),
+            int(clamp(color[1], 0, 255)),
+            int(clamp(color[2], 0, 255))
+        )
 
     def update(self, dt):
+
         self.x += self.vx * dt
         self.y += self.vy * dt
 
-        self.vx *= 0.97
-        self.vy *= 0.97
+        self.vx *= 0.96
+        self.vy *= 0.96
 
         self.life -= dt
 
     def draw(self, surface):
+
         if self.life <= 0:
             return
 
-        alpha = clamp(self.life / self.max_life, 0.0, 1.0)
+        life_ratio = clamp(
+            self.life / self.max_life,
+            0.0,
+            1.0
+        )
+
+        alpha = int(
+            255 * life_ratio
+        )
 
         radius = max(
             1,
-            int(self.size * alpha * SSAA)
+            int(self.radius * life_ratio)
         )
 
-        color = (
-            int(100 * alpha),
-            int(225 * alpha),
-            int(255 * alpha)
+        size = radius * 2 + 4
+
+        particle_surface = pygame.Surface(
+            (size, size),
+            pygame.SRCALPHA
         )
 
         pygame.draw.circle(
-            surface,
-            color,
+            particle_surface,
             (
-                int(self.x * SSAA),
-                int(self.y * SSAA)
+                self.color[0],
+                self.color[1],
+                self.color[2],
+                alpha
+            ),
+            (
+                size // 2,
+                size // 2
             ),
             radius
         )
 
+        surface.blit(
+            particle_surface,
+            (
+                int(self.x - size / 2),
+                int(self.y - size / 2)
+            )
+        )
 
-def spawn_particles(particles, x, y, amount):
+
+def spawn_particles(
+    particles,
+    x,
+    y,
+    color,
+    amount=20
+):
+
     for _ in range(amount):
-        angle = random.uniform(0.0, math.tau)
-        speed = random.uniform(40.0, 220.0)
-
-        vx = math.cos(angle) * speed
-        vy = math.sin(angle) * speed
 
         particles.append(
             Particle(
                 x,
                 y,
-                vx,
-                vy,
-                random.uniform(0.35, 0.8),
-                random.uniform(2.0, 5.0)
+                color
             )
         )
 
 
 # ============================================================
-# LEVEL STATE
+# MOVEMENT JUDGEMENT
 # ============================================================
 
-def new_level():
-    nodes = generate_garden()
+def movement_judgement(
+    player_x,
+    player_y,
+    target
+):
 
-    return {
-        "nodes": nodes,
-        "player_x": nodes[0][0],
-        "player_y": nodes[0][1],
+    target_x, target_y = target
 
-        # Node 0 is the starting position.
-        "target_index": 1,
-
-        "score": 0,
-        "combo": 0,
-        "max_combo": 0,
-
-        "perfect_count": 0,
-        "good_count": 0,
-        "bad_count": 0,
-        "miss_count": 0,
-
-        "beat_timer": 0.0,
-        "beat_flash": 0.0,
-
-        "particles": [],
-
-        "arrow_angle": 0.0,
-
-        "last_judgement": "",
-        "judgement_timer": 0.0,
-
-        "finished": False,
-    }
-
-
-# ============================================================
-# RESULTS
-# ============================================================
-
-def calculate_accuracy(state):
-    total = (
-        state["perfect_count"]
-        + state["good_count"]
-        + state["bad_count"]
-        + state["miss_count"]
+    d = distance(
+        player_x,
+        player_y,
+        target_x,
+        target_y
     )
 
-    if total <= 0:
-        return 0.0
+    if d <= PERFECT_DISTANCE:
 
-    weighted = (
-        state["perfect_count"] * 100.0
-        + state["good_count"] * 60.0
-        + state["bad_count"] * 25.0
+        return (
+            "PERFECT",
+            1000,
+            1.0
+        )
+
+    if d <= GOOD_DISTANCE:
+
+        return (
+            "GOOD",
+            600,
+            0.60
+        )
+
+    if d <= BAD_DISTANCE:
+
+        return (
+            "BAD",
+            250,
+            0.25
+        )
+
+    return (
+        "MISS",
+        0,
+        0.0
     )
 
-    return weighted / total
+
+# ============================================================
+# CLICK JUDGEMENT
+# ============================================================
+
+def click_judgement(
+    click_x,
+    click_y,
+    target,
+    timing_error
+):
+
+    target_x, target_y = target
+
+    d = distance(
+        click_x,
+        click_y,
+        target_x,
+        target_y
+    )
+
+    if d > BAD_DISTANCE:
+
+        return (
+            "MISS",
+            0,
+            0.0
+        )
+
+    error = abs(timing_error)
+
+    if error <= CLICK_PERFECT:
+
+        return (
+            "PERFECT",
+            1000,
+            1.0
+        )
+
+    if error <= CLICK_GOOD:
+
+        return (
+            "GOOD",
+            600,
+            0.60
+        )
+
+    if error <= CLICK_BAD:
+
+        return (
+            "BAD",
+            250,
+            0.25
+        )
+
+    return (
+        "MISS",
+        0,
+        0.0
+    )
 
 
-def get_rank(accuracy):
-    if accuracy >= 100:
+# ============================================================
+# RANK
+# ============================================================
+
+def calculate_rank(accuracy):
+
+    if accuracy >= 100.0:
         return "SS"
+
     if accuracy >= 95.0:
         return "S"
+
     if accuracy >= 85.0:
         return "A"
+
     if accuracy >= 70.0:
         return "B"
+
     if accuracy >= 50.0:
         return "C"
 
@@ -328,64 +453,563 @@ def get_rank(accuracy):
 
 
 # ============================================================
+# NODE DRAWING
+# ============================================================
+
+def draw_nodes(
+    surface,
+    nodes,
+    target_index,
+    completed_count,
+    mode,
+    elapsed
+):
+
+    for i, (x, y) in enumerate(nodes):
+
+        # ----------------------------------------------------
+        # Completed nodes
+        # ----------------------------------------------------
+
+        if i < completed_count:
+
+            pygame.draw.circle(
+                surface,
+                (50, 75, 105),
+                (int(x), int(y)),
+                8
+            )
+
+            pygame.draw.circle(
+                surface,
+                (100, 150, 190),
+                (int(x), int(y)),
+                4
+            )
+
+            continue
+
+        # ----------------------------------------------------
+        # Current target
+        # ----------------------------------------------------
+
+        if i == target_index:
+
+            pulse = (
+                math.sin(elapsed * 8.0)
+                * 0.5
+                + 0.5
+            )
+
+            if mode == "click":
+
+                # Larger click-mode targets.
+                radius = int(
+                    20 + pulse * 5
+                )
+
+                glow_radius = radius + 16
+                ring_radius = radius + 8
+                center_radius = 7
+
+            else:
+
+                radius = int(
+                    11 + pulse * 4
+                )
+
+                glow_radius = radius + 13
+                ring_radius = radius + 7
+                center_radius = 5
+
+            # Glow
+
+            glow_size = (
+                glow_radius * 2
+                + 4
+            )
+
+            glow = pygame.Surface(
+                (
+                    glow_size,
+                    glow_size
+                ),
+                pygame.SRCALPHA
+            )
+
+            glow_alpha = int(
+                30 + pulse * 45
+            )
+
+            pygame.draw.circle(
+                glow,
+                (
+                    60,
+                    210,
+                    255,
+                    glow_alpha
+                ),
+                (
+                    glow_size // 2,
+                    glow_size // 2
+                ),
+                glow_radius
+            )
+
+            surface.blit(
+                glow,
+                (
+                    int(x - glow_size / 2),
+                    int(y - glow_size / 2)
+                )
+            )
+
+            # Target
+
+            pygame.draw.circle(
+                surface,
+                (60, 210, 255),
+                (int(x), int(y)),
+                radius
+            )
+
+            pygame.draw.circle(
+                surface,
+                (225, 250, 255),
+                (int(x), int(y)),
+                center_radius
+            )
+
+            pygame.draw.circle(
+                surface,
+                (140, 240, 255),
+                (int(x), int(y)),
+                ring_radius,
+                2
+            )
+
+        # ----------------------------------------------------
+        # Future node
+        # ----------------------------------------------------
+
+        else:
+
+            pygame.draw.circle(
+                surface,
+                (45, 65, 90),
+                (int(x), int(y)),
+                7
+            )
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
 def main():
+
     pygame.init()
 
-    pygame.display.set_caption("Pulse Garden")
+    pygame.display.set_caption(
+        "Pulse Garden"
+    )
 
-    fullscreen = False
+    # --------------------------------------------------------
+    # Window
+    # --------------------------------------------------------
 
     window_width = GAME_WIDTH
     window_height = GAME_HEIGHT
 
+    fullscreen = False
+
     screen = pygame.display.set_mode(
-        (window_width, window_height),
+        (
+            window_width,
+            window_height
+        ),
         pygame.RESIZABLE
     )
 
-    render_width = GAME_WIDTH * SSAA
-    render_height = GAME_HEIGHT * SSAA
+    # --------------------------------------------------------
+    # Logical render surface
+    # --------------------------------------------------------
 
-    render_surface = pygame.Surface(
-        (render_width, render_height)
+    logical_surface = pygame.Surface(
+        (
+            GAME_WIDTH,
+            GAME_HEIGHT
+        )
     )
 
-    clock = pygame.time.Clock()
+    # --------------------------------------------------------
+    # SSAA render surface
+    # --------------------------------------------------------
+
+    render_surface = pygame.Surface(
+        (
+            RENDER_WIDTH,
+            RENDER_HEIGHT
+        )
+    )
+
+    # --------------------------------------------------------
+    # Fonts
+    # --------------------------------------------------------
 
     font_small = pygame.font.Font(
         None,
-        18 * SSAA
+        28
     )
 
     font_medium = pygame.font.Font(
         None,
-        25 * SSAA
+        38
     )
 
     font_large = pygame.font.Font(
         None,
-        34 * SSAA
+        64
     )
 
     font_huge = pygame.font.Font(
         None,
-        72 * SSAA
+        96
     )
 
-    state = new_level()
+    clock = pygame.time.Clock()
+
+    # ========================================================
+    # GAME STATE
+    # ========================================================
+
+    state = "mode_select"
+
+    mode = "movement"
+
+    current_bpm = MOVEMENT_BPM
+    current_beat = MOVEMENT_BEAT
+
+    nodes = []
+
+    target_index = 1
+
+    player_x = GAME_WIDTH / 2
+    player_y = GAME_HEIGHT / 2
+
+    beat_timer = 0.0
+
+    score = 0
+
+    combo = 0
+    max_combo = 0
+
+    perfects = 0
+    goods = 0
+    bads = 0
+    misses = 0
+
+    accuracy_points = 0.0
+    judged_count = 0
+
+    particles = []
+
+    judgement_text = ""
+    judgement_timer = 0.0
+
+    flash_timer = 0.0
+
+    flash_color = (
+        255,
+        255,
+        255
+    )
+
+    elapsed = 0.0
 
     running = True
+
+    # ========================================================
+    # CLICK INPUT
+    # ========================================================
+
+    click_received = False
+
+    click_x = 0.0
+    click_y = 0.0
+
+    click_timing_error = 999.0
+
+    # ========================================================
+    # START LEVEL
+    # ========================================================
+
+    def start_level(selected_mode):
+
+        nonlocal state
+        nonlocal mode
+        nonlocal nodes
+        nonlocal target_index
+        nonlocal player_x
+        nonlocal player_y
+        nonlocal beat_timer
+
+        nonlocal current_bpm
+        nonlocal current_beat
+
+        nonlocal score
+        nonlocal combo
+        nonlocal max_combo
+
+        nonlocal perfects
+        nonlocal goods
+        nonlocal bads
+        nonlocal misses
+
+        nonlocal accuracy_points
+        nonlocal judged_count
+
+        nonlocal judgement_text
+        nonlocal judgement_timer
+        nonlocal flash_timer
+
+        nonlocal click_received
+        nonlocal click_x
+        nonlocal click_y
+        nonlocal click_timing_error
+
+        mode = selected_mode
+
+        # --------------------------------------------
+        # Mode-specific BPM.
+        # --------------------------------------------
+
+        if mode == "movement":
+
+            current_bpm = MOVEMENT_BPM
+
+        else:
+
+            current_bpm = CLICK_BPM
+
+        current_beat = (
+            60.0 / current_bpm
+        )
+
+        nodes = generate_level()
+
+        player_x, player_y = nodes[0]
+
+        target_index = 1
+
+        beat_timer = 0.0
+
+        score = 0
+
+        combo = 0
+        max_combo = 0
+
+        perfects = 0
+        goods = 0
+        bads = 0
+        misses = 0
+
+        accuracy_points = 0.0
+        judged_count = 0
+
+        particles.clear()
+
+        judgement_text = ""
+        judgement_timer = 0.0
+        flash_timer = 0.0
+
+        click_received = False
+
+        click_x = 0.0
+        click_y = 0.0
+
+        click_timing_error = 999.0
+
+        state = "playing"
+
+    # ========================================================
+    # JUDGE CURRENT TARGET
+    # ========================================================
+
+    def judge_target():
+
+        nonlocal target_index
+
+        nonlocal score
+        nonlocal combo
+        nonlocal max_combo
+
+        nonlocal perfects
+        nonlocal goods
+        nonlocal bads
+        nonlocal misses
+
+        nonlocal accuracy_points
+        nonlocal judged_count
+
+        nonlocal judgement_text
+        nonlocal judgement_timer
+
+        nonlocal flash_timer
+        nonlocal flash_color
+
+        nonlocal click_received
+
+        if target_index >= len(nodes):
+
+            return
+
+        target = nodes[target_index]
+
+        # ----------------------------------------------------
+        # Movement Mode
+        # ----------------------------------------------------
+
+        if mode == "movement":
+
+            judgement, points, accuracy = (
+                movement_judgement(
+                    player_x,
+                    player_y,
+                    target
+                )
+            )
+
+        # ----------------------------------------------------
+        # Click Mode
+        # ----------------------------------------------------
+
+        else:
+
+            if click_received:
+
+                judgement, points, accuracy = (
+                    click_judgement(
+                        click_x,
+                        click_y,
+                        target,
+                        click_timing_error
+                    )
+                )
+
+            else:
+
+                # No click = automatic MISS.
+                judgement = "MISS"
+                points = 0
+                accuracy = 0.0
+
+        # ----------------------------------------------------
+        # Statistics
+        # ----------------------------------------------------
+
+        judged_count += 1
+
+        accuracy_points += accuracy
+
+        score += points
+
+        if judgement == "PERFECT":
+
+            perfects += 1
+            combo += 1
+
+            flash_color = (
+                100,
+                240,
+                255
+            )
+
+        elif judgement == "GOOD":
+
+            goods += 1
+            combo += 1
+
+            flash_color = (
+                100,
+                255,
+                170
+            )
+
+        elif judgement == "BAD":
+
+            bads += 1
+            combo += 1
+
+            flash_color = (
+                255,
+                220,
+                90
+            )
+
+        else:
+
+            misses += 1
+            combo = 0
+
+            flash_color = (
+                255,
+                90,
+                100
+            )
+
+        max_combo = max(
+            max_combo,
+            combo
+        )
+
+        judgement_text = judgement
+
+        judgement_timer = 0.55
+
+        flash_timer = 0.18
+
+        tx, ty = target
+
+        spawn_particles(
+            particles,
+            tx,
+            ty,
+            flash_color,
+            24
+        )
+
+        # ====================================================
+        # IMPORTANT:
+        #
+        # The target ALWAYS advances after being judged.
+        # This happens for PERFECT, GOOD, BAD, AND MISS.
+        # ====================================================
+
+        target_index += 1
+
+        # Reset click state for next target.
+
+        click_received = False
+
+        if target_index >= len(nodes):
+
+            state = "results"
 
     # ========================================================
     # MAIN LOOP
     # ========================================================
 
     while running:
+
         dt = clock.tick(FPS) / 1000.0
-        dt = min(dt, 0.05)
+
+        dt = min(
+            dt,
+            0.05
+        )
+
+        elapsed += dt
 
         # ====================================================
         # EVENTS
@@ -393,922 +1017,1038 @@ def main():
 
         for event in pygame.event.get():
 
+            # ------------------------------------------------
+            # Quit
+            # ------------------------------------------------
+
             if event.type == pygame.QUIT:
+
                 running = False
 
+            # ------------------------------------------------
+            # Resize
+            # ------------------------------------------------
+
             elif event.type == pygame.VIDEORESIZE:
+
                 if not fullscreen:
-                    window_width = max(640, event.w)
-                    window_height = max(480, event.h)
+
+                    window_width = max(
+                        640,
+                        event.w
+                    )
+
+                    window_height = max(
+                        360,
+                        event.h
+                    )
 
                     screen = pygame.display.set_mode(
-                        (window_width, window_height),
+                        (
+                            window_width,
+                            window_height
+                        ),
                         pygame.RESIZABLE
                     )
 
+            # ------------------------------------------------
+            # Keyboard
+            # ------------------------------------------------
+
             elif event.type == pygame.KEYDOWN:
 
-                # ------------------------------------------------
-                # FULLSCREEN
-                # ------------------------------------------------
+                # Fullscreen
 
                 if event.key == pygame.K_F11:
 
                     fullscreen = not fullscreen
 
                     if fullscreen:
-                        screen = pygame.display.set_mode(
-                            (0, 0),
-                            pygame.FULLSCREEN
-                        )
-
-                        window_width, window_height = screen.get_size()
-
-                    else:
-                        window_width = GAME_WIDTH
-                        window_height = GAME_HEIGHT
 
                         screen = pygame.display.set_mode(
                             (
-                                window_width,
-                                window_height
+                                0,
+                                0
+                            ),
+                            pygame.FULLSCREEN
+                        )
+
+                    else:
+
+                        screen = pygame.display.set_mode(
+                            (
+                                GAME_WIDTH,
+                                GAME_HEIGHT
                             ),
                             pygame.RESIZABLE
                         )
 
-                # ------------------------------------------------
-                # ESC
-                # ------------------------------------------------
+                    window_width, window_height = (
+                        screen.get_size()
+                    )
+
+                # Escape
 
                 elif event.key == pygame.K_ESCAPE:
 
                     if fullscreen:
-                        fullscreen = False
 
-                        window_width = GAME_WIDTH
-                        window_height = GAME_HEIGHT
+                        fullscreen = False
 
                         screen = pygame.display.set_mode(
                             (
-                                window_width,
-                                window_height
+                                GAME_WIDTH,
+                                GAME_HEIGHT
                             ),
                             pygame.RESIZABLE
                         )
 
+                        window_width, window_height = (
+                            screen.get_size()
+                        )
+
                     else:
+
                         running = False
 
-                # ------------------------------------------------
-                # RESTART AFTER FINISH
-                # ------------------------------------------------
+                # Mode selection
 
-                elif (
-                    event.key == pygame.K_r
-                    and state["finished"]
+                elif state == "mode_select":
+
+                    if event.key == pygame.K_1:
+
+                        start_level(
+                            "movement"
+                        )
+
+                    elif event.key == pygame.K_2:
+
+                        start_level(
+                            "click"
+                        )
+
+                # Results screen
+
+                elif state == "results":
+
+                    if event.key == pygame.K_r:
+
+                        start_level(
+                            mode
+                        )
+
+            # ------------------------------------------------
+            # Mouse
+            # ------------------------------------------------
+
+            elif (
+                event.type
+                == pygame.MOUSEBUTTONDOWN
+                and event.button == 1
+                and state == "playing"
+                and mode == "click"
+            ):
+
+                if target_index < len(nodes):
+
+                    mouse_x, mouse_y = event.pos
+
+                    # Convert window coordinates into the
+                    # game's 1280x720 logical coordinates.
+
+                    logical_x = (
+                        mouse_x
+                        * GAME_WIDTH
+                        / max(
+                            1,
+                            window_width
+                        )
+                    )
+
+                    logical_y = (
+                        mouse_y
+                        * GAME_HEIGHT
+                        / max(
+                            1,
+                            window_height
+                        )
+                    )
+
+                    # ----------------------------------------
+                    # Click timing.
+                    #
+                    # current beat occurs when beat_timer
+                    # reaches current_beat.
+                    # ----------------------------------------
+
+                    timing_error = (
+                        current_beat
+                        - beat_timer
+                    )
+
+                    # Keep the best click during the beat.
+
+                    if (
+                        not click_received
+                        or abs(timing_error)
+                        < abs(click_timing_error)
+                    ):
+
+                        click_received = True
+
+                        click_x = logical_x
+                        click_y = logical_y
+
+                        click_timing_error = (
+                            timing_error
+                        )
+
+        # ====================================================
+        # PLAYING UPDATE
+        # ====================================================
+
+        if state == "playing":
+
+            # ------------------------------------------------
+            # MOVEMENT MODE
+            # ------------------------------------------------
+
+            if mode == "movement":
+
+                keys = pygame.key.get_pressed()
+
+                dx = 0.0
+                dy = 0.0
+
+                if (
+                    keys[pygame.K_w]
+                    or keys[pygame.K_UP]
                 ):
-                    state = new_level()
 
-        # ====================================================
-        # UPDATE
-        # ====================================================
+                    dy -= 1.0
 
-        if not state["finished"]:
+                if (
+                    keys[pygame.K_s]
+                    or keys[pygame.K_DOWN]
+                ):
 
-            keys = pygame.key.get_pressed()
+                    dy += 1.0
 
-            move_x = 0.0
-            move_y = 0.0
+                if (
+                    keys[pygame.K_a]
+                    or keys[pygame.K_LEFT]
+                ):
 
-            if keys[pygame.K_a] or keys[pygame.K_LEFT]:
-                move_x -= 1.0
+                    dx -= 1.0
 
-            if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-                move_x += 1.0
+                if (
+                    keys[pygame.K_d]
+                    or keys[pygame.K_RIGHT]
+                ):
 
-            if keys[pygame.K_w] or keys[pygame.K_UP]:
-                move_y -= 1.0
+                    dx += 1.0
 
-            if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-                move_y += 1.0
+                if dx != 0.0 or dy != 0.0:
 
-            move_x, move_y = normalize(
-                move_x,
-                move_y
-            )
+                    length = math.hypot(
+                        dx,
+                        dy
+                    )
 
-            state["player_x"] += (
-                move_x * PLAYER_SPEED * dt
-            )
+                    if length > 0:
 
-            state["player_y"] += (
-                move_y * PLAYER_SPEED * dt
-            )
+                        dx /= length
+                        dy /= length
 
-            # Keep player inside the level.
-            state["player_x"] = clamp(
-                state["player_x"],
-                PLAYER_RADIUS,
-                GAME_WIDTH - PLAYER_RADIUS
-            )
+                    player_x += (
+                        dx
+                        * PLAYER_SPEED
+                        * dt
+                    )
 
-            state["player_y"] = clamp(
-                state["player_y"],
-                PLAYER_RADIUS,
-                GAME_HEIGHT - PLAYER_RADIUS
-            )
+                    player_y += (
+                        dy
+                        * PLAYER_SPEED
+                        * dt
+                    )
 
-            # ====================================================
+                player_x = clamp(
+                    player_x,
+                    PLAYER_RADIUS,
+                    GAME_WIDTH - PLAYER_RADIUS
+                )
+
+                player_y = clamp(
+                    player_y,
+                    PLAYER_RADIUS,
+                    GAME_HEIGHT - PLAYER_RADIUS
+                )
+
+            # ------------------------------------------------
             # BEAT TIMER
-            # ====================================================
+            # ------------------------------------------------
 
-            state["beat_timer"] += dt
+            beat_timer += dt
 
-            while state["beat_timer"] >= BEAT:
+            while beat_timer >= current_beat:
 
-                state["beat_timer"] -= BEAT
-                state["beat_flash"] = 1.0
+                beat_timer -= current_beat
 
-                target_index = state["target_index"]
+                # --------------------------------------------
+                # Every beat judges exactly one target.
+                #
+                # If there is no click in click mode,
+                # judge_target() creates a MISS.
+                # --------------------------------------------
 
-                if target_index < len(state["nodes"]):
+                if target_index < len(nodes):
 
-                    target_x, target_y = state["nodes"][target_index]
+                    judge_target()
 
-                    target_distance = distance(
-                        state["player_x"],
-                        state["player_y"],
-                        target_x,
-                        target_y
-                    )
+                else:
 
-                    # --------------------------------------------
-                    # JUDGEMENT
-                    # --------------------------------------------
+                    state = "results"
 
-                    if target_distance <= PERFECT_DISTANCE:
+            # ------------------------------------------------
+            # PARTICLES
+            # ------------------------------------------------
 
-                        state["score"] += 1000
-                        state["combo"] += 1
-                        state["perfect_count"] += 1
+            for particle in particles:
 
-                        state["last_judgement"] = "PERFECT"
-                        state["judgement_timer"] = 0.7
+                particle.update(dt)
 
-                        spawn_particles(
-                            state["particles"],
-                            target_x,
-                            target_y,
-                            35
-                        )
+            particles[:] = [
+                particle
+                for particle in particles
+                if particle.life > 0
+            ]
 
-                    elif target_distance <= GOOD_DISTANCE:
+            judgement_timer = max(
+                0.0,
+                judgement_timer - dt
+            )
 
-                        state["score"] += 600
-                        state["combo"] += 1
-                        state["good_count"] += 1
-
-                        state["last_judgement"] = "GOOD"
-                        state["judgement_timer"] = 0.7
-
-                        spawn_particles(
-                            state["particles"],
-                            target_x,
-                            target_y,
-                            25
-                        )
-
-                    elif target_distance <= BAD_DISTANCE:
-
-                        state["score"] += 250
-                        state["combo"] += 1
-                        state["bad_count"] += 1
-
-                        state["last_judgement"] = "BAD"
-                        state["judgement_timer"] = 0.7
-
-                        spawn_particles(
-                            state["particles"],
-                            target_x,
-                            target_y,
-                            15
-                        )
-
-                    else:
-
-                        state["combo"] = 0
-                        state["miss_count"] += 1
-
-                        state["last_judgement"] = "MISS"
-                        state["judgement_timer"] = 0.7
-
-                    state["max_combo"] = max(
-                        state["max_combo"],
-                        state["combo"]
-                    )
-
-                    # ------------------------------------------------
-                    # IMPORTANT:
-                    # The target ALWAYS advances.
-                    # ------------------------------------------------
-
-                    state["target_index"] += 1
-
-                    # ------------------------------------------------
-                    # LEVEL COMPLETE
-                    # ------------------------------------------------
-
-                    if state["target_index"] >= len(state["nodes"]):
-
-                        state["finished"] = True
-
-                        # Make sure the final target gets a burst.
-                        spawn_particles(
-                            state["particles"],
-                            target_x,
-                            target_y,
-                            60
-                        )
-
-        # ====================================================
-        # PARTICLES
-        # ====================================================
-
-        for particle in state["particles"]:
-            particle.update(dt)
-
-        state["particles"] = [
-            particle
-            for particle in state["particles"]
-            if particle.life > 0
-        ]
-
-        state["beat_flash"] = max(
-            0.0,
-            state["beat_flash"] - dt * 4.0
-        )
-
-        state["judgement_timer"] = max(
-            0.0,
-            state["judgement_timer"] - dt
-        )
-
-        # ====================================================
-        # CURRENT TARGET ARROW
-        # ====================================================
-
-        if not state["finished"]:
-
-            target_index = state["target_index"]
-
-            if target_index < len(state["nodes"]):
-
-                target_x, target_y = state["nodes"][target_index]
-
-                desired_angle = math.atan2(
-                    target_y - state["player_y"],
-                    target_x - state["player_x"]
-                )
-
-                # Smooth purely visual arrow rotation.
-                difference = (
-                    desired_angle
-                    - state["arrow_angle"]
-                    + math.pi
-                ) % math.tau - math.pi
-
-                state["arrow_angle"] += difference * min(
-                    1.0,
-                    dt * 12.0
-                )
+            flash_timer = max(
+                0.0,
+                flash_timer - dt
+            )
 
         # ====================================================
         # DRAW
         # ====================================================
 
-        render_surface.fill(BG)
-
-        # ====================================================
-        # BACKGROUND GRID
-        # ====================================================
-
-        grid_offset = (
-            pygame.time.get_ticks() * 0.015
-        ) % 40.0
-
-        for x in range(-40, GAME_WIDTH + 40, 40):
-
-            px = int(
-                (x + grid_offset) * SSAA
-            )
-
-            pygame.draw.line(
-                render_surface,
-                GRID,
-                (px, 0),
-                (px, render_height),
-                max(1, SSAA)
-            )
-
-        for y in range(-40, GAME_HEIGHT + 40, 40):
-
-            py = int(
-                (y + grid_offset) * SSAA
-            )
-
-            pygame.draw.line(
-                render_surface,
-                GRID,
-                (0, py),
-                (render_width, py),
-                max(1, SSAA)
-            )
-
-        # ====================================================
-        # BACKGROUND STARS
-        # ====================================================
-
-        random.seed(STAR_SEED)
-
-        for _ in range(180):
-
-            sx = random.randrange(GAME_WIDTH)
-            sy = random.randrange(GAME_HEIGHT)
-
-            pygame.draw.circle(
-                render_surface,
-                STAR,
-                (
-                    sx * SSAA,
-                    sy * SSAA
-                ),
-                random.choice([1, 1, 1, 2]) * SSAA
-            )
-
-        # ====================================================
-        # ROUTE GUIDE
-        # ====================================================
-
-        nodes = state["nodes"]
-        target_index = state["target_index"]
-
-        route_end = min(
-            target_index + 7,
-            len(nodes)
+        logical_surface.fill(
+            (7, 10, 20)
         )
 
-        if not state["finished"]:
-
-            route_points = [
-                nodes[i]
-                for i in range(
-                    max(0, target_index - 1),
-                    route_end
-                )
-            ]
-
-            if len(route_points) >= 2:
-
-                points = [
-                    (
-                        int(x * SSAA),
-                        int(y * SSAA)
-                    )
-                    for x, y in route_points
-                ]
-
-                pygame.draw.lines(
-                    render_surface,
-                    ROUTE,
-                    False,
-                    points,
-                    2 * SSAA
-                )
-
         # ====================================================
-        # NODES
+        # MODE SELECT
         # ====================================================
 
-        pulse = (
-            math.sin(
-                pygame.time.get_ticks() * 0.008
-            ) + 1.0
-        ) * 0.5
+        if state == "mode_select":
 
-        for i, (nx, ny) in enumerate(nodes):
-
-            if i == 0:
-                # Starting node.
-                color = NODE_RING
-                radius = 9
-
-            elif i < target_index:
-                # Already completed.
-                color = NODE_DIM
-                radius = 5
-
-            elif (
-                i == target_index
-                and not state["finished"]
-            ):
-                # Current target.
-                color = NODE_BRIGHT
-                radius = int(11 + pulse * 4)
-
-                # Outer glow ring.
-                pygame.draw.circle(
-                    render_surface,
-                    NODE_OUTER,
-                    (
-                        int(nx * SSAA),
-                        int(ny * SSAA)
-                    ),
-                    int((radius + 10) * SSAA),
-                    2 * SSAA
-                )
-
-                pygame.draw.circle(
-                    render_surface,
-                    NODE_RING,
-                    (
-                        int(nx * SSAA),
-                        int(ny * SSAA)
-                    ),
-                    int((radius + 5) * SSAA),
-                    2 * SSAA
-                )
-
-            else:
-                color = NODE_OUTER
-                radius = 6
-
-            pygame.draw.circle(
-                render_surface,
-                color,
-                (
-                    int(nx * SSAA),
-                    int(ny * SSAA)
-                ),
-                radius * SSAA
+            draw_text(
+                logical_surface,
+                "PULSE GARDEN",
+                font_huge,
+                GAME_WIDTH / 2,
+                130,
+                (120, 220, 255),
+                True
             )
+
+            draw_text(
+                logical_surface,
+                "Choose a game mode",
+                font_large,
+                GAME_WIDTH / 2,
+                230,
+                (230, 240, 255),
+                True
+            )
+
+            # Movement card
+
+            pygame.draw.rect(
+                logical_surface,
+                (20, 35, 55),
+                (
+                    220,
+                    330,
+                    370,
+                    190
+                ),
+                border_radius=18
+            )
+
+            pygame.draw.rect(
+                logical_surface,
+                (60, 130, 180),
+                (
+                    220,
+                    330,
+                    370,
+                    190
+                ),
+                3,
+                border_radius=18
+            )
+
+            draw_text(
+                logical_surface,
+                "1",
+                font_huge,
+                405,
+                385,
+                (90, 220, 255),
+                True
+            )
+
+            draw_text(
+                logical_surface,
+                "MOVEMENT",
+                font_medium,
+                405,
+                455,
+                (240, 245, 255),
+                True
+            )
+
+            draw_text(
+                logical_surface,
+                f"{MOVEMENT_BPM} BPM",
+                font_small,
+                405,
+                490,
+                (160, 180, 205),
+                True
+            )
+
+            # Click card
+
+            pygame.draw.rect(
+                logical_surface,
+                (20, 35, 55),
+                (
+                    690,
+                    330,
+                    370,
+                    190
+                ),
+                border_radius=18
+            )
+
+            pygame.draw.rect(
+                logical_surface,
+                (70, 170, 190),
+                (
+                    690,
+                    330,
+                    370,
+                    190
+                ),
+                3,
+                border_radius=18
+            )
+
+            draw_text(
+                logical_surface,
+                "2",
+                font_huge,
+                875,
+                385,
+                (90, 240, 220),
+                True
+            )
+
+            draw_text(
+                logical_surface,
+                "CLICK",
+                font_medium,
+                875,
+                455,
+                (240, 245, 255),
+                True
+            )
+
+            draw_text(
+                logical_surface,
+                f"{CLICK_BPM} BPM",
+                font_small,
+                875,
+                490,
+                (160, 180, 205),
+                True
+            )
+
+            draw_text(
+                logical_surface,
+                f"{NODE_COUNT - 1} targets",
+                font_small,
+                GAME_WIDTH / 2,
+                590,
+                (120, 140, 170),
+                True
+            )
+
+            draw_text(
+                logical_surface,
+                "F11: Fullscreen",
+                font_small,
+                GAME_WIDTH / 2,
+                635,
+                (100, 120, 145),
+                True
+            )
+
+        # ====================================================
+        # PLAYING
+        # ====================================================
+
+        elif state == "playing":
+
+            # ------------------------------------------------
+            # Background grid
+            # ------------------------------------------------
+
+            grid_size = 80
+
+            for x in range(
+                0,
+                GAME_WIDTH + 1,
+                grid_size
+            ):
+
+                pygame.draw.line(
+                    logical_surface,
+                    (12, 18, 32),
+                    (x, 0),
+                    (x, GAME_HEIGHT)
+                )
+
+            for y in range(
+                0,
+                GAME_HEIGHT + 1,
+                grid_size
+            ):
+
+                pygame.draw.line(
+                    logical_surface,
+                    (12, 18, 32),
+                    (0, y),
+                    (GAME_WIDTH, y)
+                )
+
+            # ------------------------------------------------
+            # Route
+            # ------------------------------------------------
+
+            for i in range(
+                max(
+                    0,
+                    target_index - 1
+                ),
+                min(
+                    len(nodes) - 1,
+                    target_index + 8
+                )
+            ):
+
+                x1, y1 = nodes[i]
+                x2, y2 = nodes[i + 1]
+
+                pygame.draw.line(
+                    logical_surface,
+                    (25, 55, 75),
+                    (
+                        int(x1),
+                        int(y1)
+                    ),
+                    (
+                        int(x2),
+                        int(y2)
+                    ),
+                    2
+                )
+
+            # ------------------------------------------------
+            # Nodes
+            # ------------------------------------------------
+
+            draw_nodes(
+                logical_surface,
+                nodes,
+                target_index,
+                target_index,
+                mode,
+                elapsed
+            )
+
+            # ------------------------------------------------
+            # Direction indicator
+            # ------------------------------------------------
 
             if (
-                i == target_index
-                and not state["finished"]
+                mode == "movement"
+                and target_index < len(nodes)
             ):
 
-                pygame.draw.circle(
-                    render_surface,
-                    NODE_WHITE,
-                    (
-                        int(nx * SSAA),
-                        int(ny * SSAA)
-                    ),
-                    3 * SSAA
+                tx, ty = nodes[target_index]
+
+                dx = tx - player_x
+                dy = ty - player_y
+
+                length = math.hypot(
+                    dx,
+                    dy
                 )
 
-        # ====================================================
-        # PLAYER
-        # ====================================================
+                if length > 1:
 
-        px = int(state["player_x"] * SSAA)
-        py = int(state["player_y"] * SSAA)
+                    dx /= length
+                    dy /= length
 
-        pygame.draw.circle(
-            render_surface,
-            PLAYER_OUTER,
-            (px, py),
-            int(PLAYER_RADIUS * SSAA + 5 * SSAA)
-        )
+                    arrow_distance = 48
 
-        pygame.draw.circle(
-            render_surface,
-            PLAYER,
-            (px, py),
-            int(PLAYER_RADIUS * SSAA)
-        )
-
-        pygame.draw.circle(
-            render_surface,
-            PLAYER_CORE,
-            (px, py),
-            int(PLAYER_RADIUS * SSAA * 0.42)
-        )
-
-        # ====================================================
-        # ARROW
-        # ====================================================
-
-        if not state["finished"]:
-
-            arrow_length = 45.0
-            arrow_x = (
-                state["player_x"]
-                + math.cos(state["arrow_angle"])
-                * arrow_length
-            )
-
-            arrow_y = (
-                state["player_y"]
-                + math.sin(state["arrow_angle"])
-                * arrow_length
-            )
-
-            pygame.draw.line(
-                render_surface,
-                NODE_WHITE,
-                (px, py),
-                (
-                    int(arrow_x * SSAA),
-                    int(arrow_y * SSAA)
-                ),
-                3 * SSAA
-            )
-
-            # Arrowhead.
-            left_angle = state["arrow_angle"] + math.pi * 0.75
-            right_angle = state["arrow_angle"] - math.pi * 0.75
-
-            arrow_size = 10.0
-
-            left_x = (
-                arrow_x
-                + math.cos(left_angle) * arrow_size
-            )
-
-            left_y = (
-                arrow_y
-                + math.sin(left_angle) * arrow_size
-            )
-
-            right_x = (
-                arrow_x
-                + math.cos(right_angle) * arrow_size
-            )
-
-            right_y = (
-                arrow_y
-                + math.sin(right_angle) * arrow_size
-            )
-
-            pygame.draw.polygon(
-                render_surface,
-                NODE_WHITE,
-                [
-                    (
-                        int(arrow_x * SSAA),
-                        int(arrow_y * SSAA)
-                    ),
-                    (
-                        int(left_x * SSAA),
-                        int(left_y * SSAA)
-                    ),
-                    (
-                        int(right_x * SSAA),
-                        int(right_y * SSAA)
+                    ax = (
+                        player_x
+                        + dx
+                        * arrow_distance
                     )
-                ]
-            )
 
-        # ====================================================
-        # PARTICLES
-        # ====================================================
+                    ay = (
+                        player_y
+                        + dy
+                        * arrow_distance
+                    )
 
-        for particle in state["particles"]:
-            particle.draw(render_surface)
+                    pygame.draw.line(
+                        logical_surface,
+                        (130, 230, 255),
+                        (
+                            int(player_x),
+                            int(player_y)
+                        ),
+                        (
+                            int(ax),
+                            int(ay)
+                        ),
+                        3
+                    )
 
-        # ====================================================
-        # HUD
-        # ====================================================
+            # ------------------------------------------------
+            # Movement player
+            # ------------------------------------------------
 
-        draw_text(
-            render_surface,
-            font_medium,
-            f"Score  {state['score']:,}",
-            20 * SSAA,
-            16 * SSAA
-        )
+            if mode == "movement":
 
-        draw_text(
-            render_surface,
-            font_medium,
-            f"Combo  {state['combo']}",
-            20 * SSAA,
-            48 * SSAA
-        )
-
-        if not state["finished"]:
-
-            current_node = min(
-                state["target_index"],
-                len(nodes)
-            )
-
-            draw_text(
-                render_surface,
-                font_small,
-                f"Node {current_node}/{len(nodes) - 1}",
-                20 * SSAA,
-                84 * SSAA,
-                TEXT_DIM
-            )
-
-            # Progress bar.
-            bar_x = 20 * SSAA
-            bar_y = 112 * SSAA
-            bar_width = 250 * SSAA
-            bar_height = 8 * SSAA
-
-            pygame.draw.rect(
-                render_surface,
-                PROGRESS_BG,
-                (
-                    bar_x,
-                    bar_y,
-                    bar_width,
-                    bar_height
-                )
-            )
-
-            progress = clamp(
-                state["target_index"]
-                / max(1, len(nodes) - 1),
-                0.0,
-                1.0
-            )
-
-            pygame.draw.rect(
-                render_surface,
-                PROGRESS,
-                (
-                    bar_x,
-                    bar_y,
-                    int(bar_width * progress),
-                    bar_height
-                )
-            )
-
-            draw_text(
-                render_surface,
-                font_small,
-                "WASD / Arrow Keys = Move",
-                20 * SSAA,
-                (GAME_HEIGHT - 54) * SSAA,
-                TEXT_DIM
-            )
-
-            draw_text(
-                render_surface,
-                font_small,
-                "F11 = Fullscreen    Esc = Exit",
-                20 * SSAA,
-                (GAME_HEIGHT - 30) * SSAA,
-                TEXT_DIM
-            )
-
-        # ====================================================
-        # JUDGEMENT
-        # ====================================================
-
-        if (
-            state["judgement_timer"] > 0.0
-            and not state["finished"]
-        ):
-
-            judgement = state["last_judgement"]
-
-            if judgement == "PERFECT":
-                judgement_color = PERFECT_COLOR
-            elif judgement == "GOOD":
-                judgement_color = GOOD_COLOR
-            elif judgement == "BAD":
-                judgement_color = BAD_COLOR
-            else:
-                judgement_color = MISS_COLOR
-
-            alpha = clamp(
-                state["judgement_timer"] / 0.7,
-                0.0,
-                1.0
-            )
-
-            # Render text to a transparent surface so it can fade.
-            judgement_surface = pygame.Surface(
-                (
-                    400 * SSAA,
-                    70 * SSAA
-                ),
-                pygame.SRCALPHA
-            )
-
-            judgement_image = font_large.render(
-                judgement,
-                True,
-                (
-                    judgement_color[0],
-                    judgement_color[1],
-                    judgement_color[2],
-                    int(255 * alpha)
-                )
-            )
-
-            judgement_rect = judgement_image.get_rect(
-                center=(
-                    200 * SSAA,
-                    35 * SSAA
-                )
-            )
-
-            judgement_surface.blit(
-                judgement_image,
-                judgement_rect
-            )
-
-            render_surface.blit(
-                judgement_surface,
-                (
-                    int(
-                        GAME_WIDTH * SSAA / 2
-                        - 200 * SSAA
+                pygame.draw.circle(
+                    logical_surface,
+                    (80, 180, 255),
+                    (
+                        int(player_x),
+                        int(player_y)
                     ),
-                    int(150 * SSAA)
+                    PLAYER_RADIUS
                 )
+
+                pygame.draw.circle(
+                    logical_surface,
+                    (220, 250, 255),
+                    (
+                        int(player_x),
+                        int(player_y)
+                    ),
+                    5
+                )
+
+            # ------------------------------------------------
+            # Click cursor
+            # ------------------------------------------------
+
+            else:
+
+                mouse_x, mouse_y = pygame.mouse.get_pos()
+
+                logical_x = (
+                    mouse_x
+                    * GAME_WIDTH
+                    / max(
+                        1,
+                        window_width
+                    )
+                )
+
+                logical_y = (
+                    mouse_y
+                    * GAME_HEIGHT
+                    / max(
+                        1,
+                        window_height
+                    )
+                )
+
+                pygame.draw.circle(
+                    logical_surface,
+                    (120, 240, 220),
+                    (
+                        int(logical_x),
+                        int(logical_y)
+                    ),
+                    10,
+                    2
+                )
+
+                pygame.draw.line(
+                    logical_surface,
+                    (120, 240, 220),
+                    (
+                        int(logical_x - 14),
+                        int(logical_y)
+                    ),
+                    (
+                        int(logical_x + 14),
+                        int(logical_y)
+                    ),
+                    2
+                )
+
+                pygame.draw.line(
+                    logical_surface,
+                    (120, 240, 220),
+                    (
+                        int(logical_x),
+                        int(logical_y - 14)
+                    ),
+                    (
+                        int(logical_x),
+                        int(logical_y + 14)
+                    ),
+                    2
+                )
+
+            # ------------------------------------------------
+            # Particles
+            # ------------------------------------------------
+
+            for particle in particles:
+
+                particle.draw(
+                    logical_surface
+                )
+
+            # ------------------------------------------------
+            # HUD
+            # ------------------------------------------------
+
+            draw_text(
+                logical_surface,
+                f"{mode.upper()} MODE",
+                font_small,
+                25,
+                20,
+                (130, 190, 220)
             )
 
-        # ====================================================
-        # BEAT FLASH
-        # ====================================================
-
-        if state["beat_flash"] > 0.0:
-
-            flash_alpha = int(
-                clamp(
-                    state["beat_flash"],
-                    0.0,
-                    1.0
-                ) * 35
+            draw_text(
+                logical_surface,
+                f"{current_bpm} BPM",
+                font_small,
+                25,
+                52,
+                (180, 200, 220)
             )
 
-            flash_surface = pygame.Surface(
-                (render_width, render_height),
-                pygame.SRCALPHA
+            draw_text(
+                logical_surface,
+                f"Score: {score}",
+                font_small,
+                25,
+                84
             )
 
-            flash_surface.fill(
+            draw_text(
+                logical_surface,
+                f"Combo: {combo}",
+                font_small,
+                25,
+                116,
+                (255, 210, 120)
+            )
+
+            draw_text(
+                logical_surface,
+                f"Target: {min(target_index, NODE_COUNT - 1)} / {NODE_COUNT - 1}",
+                font_small,
+                GAME_WIDTH - 275,
+                20,
+                (180, 195, 215)
+            )
+
+            # ------------------------------------------------
+            # Beat bar
+            # ------------------------------------------------
+
+            beat_progress = (
+                beat_timer / current_beat
+            )
+
+            pygame.draw.rect(
+                logical_surface,
+                (25, 35, 50),
                 (
-                    100,
-                    220,
-                    255,
-                    flash_alpha
+                    GAME_WIDTH / 2 - 100,
+                    25,
+                    200,
+                    8
+                ),
+                border_radius=4
+            )
+
+            pygame.draw.rect(
+                logical_surface,
+                (80, 210, 255),
+                (
+                    GAME_WIDTH / 2 - 100,
+                    25,
+                    int(
+                        200
+                        * beat_progress
+                    ),
+                    8
+                ),
+                border_radius=4
+            )
+
+            # ------------------------------------------------
+            # Judgement
+            # ------------------------------------------------
+
+            if judgement_timer > 0:
+
+                judgement_color = {
+                    "PERFECT": (
+                        100,
+                        240,
+                        255
+                    ),
+                    "GOOD": (
+                        100,
+                        255,
+                        170
+                    ),
+                    "BAD": (
+                        255,
+                        220,
+                        90
+                    ),
+                    "MISS": (
+                        255,
+                        90,
+                        100
+                    )
+                }.get(
+                    judgement_text,
+                    (255, 255, 255)
                 )
-            )
 
-            render_surface.blit(
-                flash_surface,
-                (0, 0)
-            )
+                draw_text(
+                    logical_surface,
+                    judgement_text,
+                    font_large,
+                    GAME_WIDTH / 2,
+                    GAME_HEIGHT - 105,
+                    judgement_color,
+                    True
+                )
+
+            # ------------------------------------------------
+            # Flash
+            # ------------------------------------------------
+
+            if flash_timer > 0:
+
+                alpha = int(
+                    50
+                    * clamp(
+                        flash_timer / 0.18,
+                        0.0,
+                        1.0
+                    )
+                )
+
+                flash = pygame.Surface(
+                    (
+                        GAME_WIDTH,
+                        GAME_HEIGHT
+                    ),
+                    pygame.SRCALPHA
+                )
+
+                flash.fill(
+                    (
+                        flash_color[0],
+                        flash_color[1],
+                        flash_color[2],
+                        alpha
+                    )
+                )
+
+                logical_surface.blit(
+                    flash,
+                    (0, 0)
+                )
 
         # ====================================================
-        # RESULTS SCREEN
+        # RESULTS
         # ====================================================
 
-        if state["finished"]:
+        elif state == "results":
 
-            overlay = pygame.Surface(
-                (render_width, render_height),
-                pygame.SRCALPHA
+            total = max(
+                1,
+                judged_count
             )
 
-            overlay.fill(
-                (3, 5, 12, 220)
+            accuracy = (
+                accuracy_points
+                / total
+            ) * 100.0
+
+            rank = calculate_rank(
+                accuracy
             )
-
-            render_surface.blit(
-                overlay,
-                (0, 0)
-            )
-
-            accuracy = calculate_accuracy(state)
-            rank = get_rank(accuracy)
-
-            center_x = GAME_WIDTH * SSAA / 2
 
             draw_text(
-                render_surface,
-                font_huge,
+                logical_surface,
                 "LEVEL COMPLETE",
-                center_x,
-                125 * SSAA,
-                NODE_WHITE,
-                center=True
+                font_huge,
+                GAME_WIDTH / 2,
+                100,
+                (120, 225, 255),
+                True
             )
 
             draw_text(
-                render_surface,
+                logical_surface,
+                rank,
+                font_huge,
+                GAME_WIDTH / 2,
+                210,
+                (255, 230, 120),
+                True
+            )
+
+            draw_text(
+                logical_surface,
+                f"{accuracy:.2f}% ACCURACY",
                 font_large,
-                f"RANK  {rank}",
-                center_x,
-                215 * SSAA,
-                NODE_BRIGHT,
-                center=True
+                GAME_WIDTH / 2,
+                290,
+                (235, 245, 255),
+                True
             )
 
             draw_text(
-                render_surface,
+                logical_surface,
+                f"Score      {score}",
                 font_medium,
-                f"Score  {state['score']:,}",
-                center_x,
-                285 * SSAA,
-                TEXT,
-                center=True
+                300,
+                365
             )
 
             draw_text(
-                render_surface,
+                logical_surface,
+                f"Max Combo  {max_combo}",
                 font_medium,
-                f"Accuracy  {accuracy:.2f}%",
-                center_x,
-                325 * SSAA,
-                TEXT,
-                center=True
+                300,
+                410
             )
 
             draw_text(
-                render_surface,
+                logical_surface,
+                f"Perfect    {perfects}",
                 font_medium,
-                f"Max Combo  {state['max_combo']}",
-                center_x,
-                365 * SSAA,
-                TEXT,
-                center=True
-            )
-
-            # Judgement statistics.
-            draw_text(
-                render_surface,
-                font_small,
-                f"PERFECT   {state['perfect_count']}",
-                center_x - 250 * SSAA,
-                430 * SSAA,
-                PERFECT_COLOR,
-                center=True
+                300,
+                455,
+                (100, 240, 255)
             )
 
             draw_text(
-                render_surface,
-                font_small,
-                f"GOOD   {state['good_count']}",
-                center_x - 80 * SSAA,
-                430 * SSAA,
-                GOOD_COLOR,
-                center=True
-            )
-
-            draw_text(
-                render_surface,
-                font_small,
-                f"BAD   {state['bad_count']}",
-                center_x + 80 * SSAA,
-                430 * SSAA,
-                BAD_COLOR,
-                center=True
-            )
-
-            draw_text(
-                render_surface,
-                font_small,
-                f"MISS   {state['miss_count']}",
-                center_x + 250 * SSAA,
-                430 * SSAA,
-                MISS_COLOR,
-                center=True
-            )
-
-            draw_text(
-                render_surface,
+                logical_surface,
+                f"Good       {goods}",
                 font_medium,
-                "R = Play Again",
-                center_x,
-                515 * SSAA,
-                TEXT,
-                center=True
+                720,
+                365,
+                (100, 255, 170)
             )
 
             draw_text(
-                render_surface,
+                logical_surface,
+                f"Bad        {bads}",
+                font_medium,
+                720,
+                410,
+                (255, 220, 90)
+            )
+
+            draw_text(
+                logical_surface,
+                f"Miss       {misses}",
+                font_medium,
+                720,
+                455,
+                (255, 90, 100)
+            )
+
+            draw_text(
+                logical_surface,
+                f"{current_bpm} BPM",
                 font_small,
-                "Esc = Exit",
-                center_x,
-                555 * SSAA,
-                TEXT_DIM,
-                center=True
+                GAME_WIDTH / 2,
+                510,
+                (130, 155, 180),
+                True
+            )
+
+            draw_text(
+                logical_surface,
+                "R  —  Play Again",
+                font_medium,
+                GAME_WIDTH / 2,
+                565,
+                (180, 205, 230),
+                True
+            )
+
+            draw_text(
+                logical_surface,
+                "ESC  —  Quit",
+                font_small,
+                GAME_WIDTH / 2,
+                620,
+                (100, 120, 145),
+                True
             )
 
         # ====================================================
-        # SSAA DOWNSCALE
+        # SSAA
         # ====================================================
 
-        scaled_surface = pygame.transform.smoothscale(
+        pygame.transform.scale(
+            logical_surface,
+            (
+                RENDER_WIDTH,
+                RENDER_HEIGHT
+            ),
+            render_surface
+        )
+
+        # ====================================================
+        # WINDOW SCALE
+        # ====================================================
+
+        final_surface = pygame.transform.smoothscale(
             render_surface,
             (
                 window_width,
@@ -1317,7 +2057,7 @@ def main():
         )
 
         screen.blit(
-            scaled_surface,
+            final_surface,
             (0, 0)
         )
 
