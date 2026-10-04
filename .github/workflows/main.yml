@@ -42,7 +42,6 @@ jobs:
       - name: Create AppDir
         run: |
           mkdir -p AppDir/usr/bin
-          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
 
           cp dist/PulseGarden AppDir/usr/bin/PulseGarden
 
@@ -86,7 +85,7 @@ jobs:
 
           pygame.image.save(
               surface,
-              "AppDir/usr/share/icons/hicolor/256x256/apps/PulseGarden.png"
+              "AppDir/PulseGarden.png"
           )
 
           pygame.quit()
@@ -109,7 +108,7 @@ jobs:
         run: |
           chmod +x PulseGarden-Linux-x86_64.AppImage
 
-      - name: Show AppImage
+      - name: Verify AppImage
         run: |
           ls -lh PulseGarden-Linux-x86_64.AppImage
           file PulseGarden-Linux-x86_64.AppImage
@@ -147,6 +146,10 @@ jobs:
             --name PulseGarden `
             main.py
 
+      - name: Verify Windows executable
+        run: |
+          Get-Item dist/PulseGarden.exe
+
       - name: Upload Windows executable
         uses: actions/upload-artifact@v4
         with:
@@ -174,6 +177,14 @@ jobs:
         with:
           name: PulseGarden-Windows
           path: release/windows
+
+      - name: Make AppImage executable
+        run: |
+          chmod +x release/linux/PulseGarden-Linux-x86_64.AppImage
+
+      - name: List release files
+        run: |
+          find release -type f -exec ls -lh {} \;
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
