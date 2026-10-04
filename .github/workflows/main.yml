@@ -45,6 +45,18 @@ jobs:
 
           cp dist/PulseGarden AppDir/usr/bin/PulseGarden
 
+      - name: Create AppRun
+        run: |
+          cat > AppDir/AppRun <<'EOF'
+          #!/bin/sh
+
+          HERE="$(dirname "$(readlink -f "$0")")"
+
+          exec "$HERE/usr/bin/PulseGarden" "$@"
+          EOF
+
+          chmod +x AppDir/AppRun
+
       - name: Create desktop entry
         run: |
           cat > AppDir/PulseGarden.desktop <<'EOF'
@@ -91,6 +103,15 @@ jobs:
           pygame.quit()
           PY
 
+      - name: Verify AppDir
+        run: |
+          echo "AppDir contents:"
+          find AppDir -type f -o -type l | sort
+
+          echo
+          echo "AppRun permissions:"
+          ls -l AppDir/AppRun
+
       - name: Download appimagetool
         run: |
           wget -O appimagetool \
@@ -103,10 +124,6 @@ jobs:
           ARCH=x86_64 ./appimagetool \
             AppDir \
             PulseGarden-Linux-x86_64.AppImage
-
-      - name: Make AppImage executable
-        run: |
-          chmod +x PulseGarden-Linux-x86_64.AppImage
 
       - name: Verify AppImage
         run: |
