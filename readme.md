@@ -1,6 +1,6 @@
 # Pulse Garden
 
-Pulse Garden is an original rhythm game made with **Python, Pygame, and NumPy-friendly game architecture**.
+Pulse Garden is an original rhythm game made with **Python and Pygame**.
 
 Move around the arena and reach the glowing target before each beat. Your distance from the target when the beat occurs determines your judgement.
 
